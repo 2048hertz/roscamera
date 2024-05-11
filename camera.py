@@ -1,92 +1,202 @@
-import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QPushButton, QWidget
-from PyQt5.QtGui import QPixmap
-from picamera2 import PiCamera2, PreviewStream, JPEGStream
-import os
+import sys, platform, os
+from PyQt5.QtWidgets import QMainWindow, QApplication, QPushButton, QLabel, QWidget, QTabWidget, QVBoxLayout, QGridLayout
+from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import pyqtSlot, Qt
 
-class CameraApp(QMainWindow):
+from PyQt5.QtGui import QPalette, QColor, QFont
+
+from picamera2 import Picamera2
+from picamera2.previews.qt import QGlPicamera2
+from picamera2 import __name__ as picamera2_name
+from libcamera import controls
+
+import time
+from importlib.metadata import version
+
+os.environ["LIBCAMERA_LOG_LEVELS"] = "3"
+
+picam2 = Picamera2(1)
+
+#=====================================
+preview_width= 800
+preview_height = int(picam2.sensor_resolution[1] * preview_width/picam2.sensor_resolution[0])
+preview_config_raw = picam2.create_preview_configuration(main={"size": (preview_width, preview_height)},
+                                                         raw={"size": picam2.sensor_resolution})
+picam2.configure(preview_config_raw)
+#=====================================
+picam2.set_controls({"AfMode": controls.AfModeEnum.Continuous})
+#=====================================
+
+class App(QMainWindow):
+
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("RobertOS Camera App")
+        self.title = __file__
+        self.left = 0
+        self.top = 0
+        self.setWindowTitle(self.title)
 
-        # Create central widget and layout
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-        self.layout = QVBoxLayout(self.central_widget)
+        self.main_widget = MyMainWidget(self)
+        self.setCentralWidget(self.main_widget)
+        
+        self.show()
 
-        # Create preview label
-        self.preview_label = QLabel()
-        self.layout.addWidget(self.preview_label)
+class MyMainWidget(QWidget):
+    
+    def read_f(self, file):
+        with open(file, encoding='UTF-8') as reader:
+            content = reader.read()
+        return content
+    
+    def read_pretty_name(self):
+        with open("/etc/os-release") as f:
+            os_release = {}
+            for line in f:
+                k,v = line.rstrip().split("=")
+                os_release[k] = v.strip('"')
+        return os_release['PRETTY_NAME']
+                
+    def on_Capture_Clicked(self):
+        global picam2
+        self.btnCapture.setEnabled(False)
+        
+        cfg = picam2.create_still_configuration()
+        
+        timeStamp = time.strftime("%Y%m%d-%H%M%S")
+        targetPath= os.path.expanduser('~/Pictures/img_') + timeStamp + ".jpg"
+        print("- Capture image:", targetPath)
+        
+        picam2.switch_mode_and_capture_file(cfg, targetPath,signal_function=self.qpicamera2.signal_done)
 
-        # Initialize picamera2
-        self.camera = PiCamera2()
-        self.camera.resolution = (640, 480)  # Set resolution
-        self.preview_stream = None
-        self.is_recording = False
+    def on_Record_Clicked(self):
+        global picam2
+        self.btnRecord.setEnabled(False)
+        
+        cfg = picam2.create_video_configuration()
+        
+        timeStamp = time.strftime("%Y%m%d-%H%M%S")
+        self.video_path = os.path.expanduser('~/Videos/vid_') + timeStamp + ".h264"
+        print("- Recording video:", self.video_path)
+        
+        picam2.switch_mode_and_capture_file(cfg, self.video_path,signal_function=self.qpicamera2.signal_done)
 
-        # Create buttons
-        self.start_preview_button = QPushButton("Start Preview")
-        self.start_preview_button.clicked.connect(self.start_preview)
-        self.layout.addWidget(self.start_preview_button)
+    def on_Stop_Record_Clicked(self):
+        global picam2
+        self.btnStopRecord.setEnabled(False)
+        
+        picam2.stop()
+        os.rename(self.video_path, self.video_path[:-5]+"_stopped.h264")
+        print("- Recording stopped.")
 
-        self.capture_image_button = QPushButton("Capture Image")
-        self.capture_image_button.clicked.connect(self.capture_image)
-        self.layout.addWidget(self.capture_image_button)
+    def capture_done(self, job):
+        global picam2
+        result = picam2.wait(job)
+        if self.btnCapture.isEnabled() == False:
+            self.btnCapture.setEnabled(True)
+            print("- capture_done.")
+        elif self.btnRecord.isEnabled() == False:
+            self.btnRecord.setEnabled(True)
+            print("- recording_done.")
+    
+    def __init__(self, parent):
+        super(QWidget, self).__init__(parent)
+        self.layout = QVBoxLayout()
+        
+        # Initialize tab screen
+        self.tabs = QTabWidget()
+        self.tabCapture = QWidget()
+        self.tabInfo = QWidget()
 
-        self.start_video_button = QPushButton("Start Video Recording")
-        self.start_video_button.clicked.connect(self.start_video_recording)
-        self.layout.addWidget(self.start_video_button)
+        # Add tabs
+        self.tabs.addTab(self.tabCapture,"Capture")
+        self.tabs.addTab(self.tabInfo,"  Info  ")
+        
+        #=== Tab Capture ===
+        # Create first tab
+        self.tabCapture.layout = QVBoxLayout()
+        
+        self.tabCapture.setAutoFillBackground(True)
+        palette = self.palette()
+        palette.setColor(QPalette.Window, QColor('black'))
+        self.tabCapture.setPalette(palette)
+        
+        #Prepare Preview
+        self.qpicamera2 = QGlPicamera2(picam2,
+                          width=preview_width, height=preview_height,
+                          keep_ar=True)
 
-        self.stop_video_button = QPushButton("Stop Video Recording")
-        self.stop_video_button.clicked.connect(self.stop_video_recording)
-        self.stop_video_button.setEnabled(False)
-        self.layout.addWidget(self.stop_video_button)
+        self.tabCapture.layout.addWidget(self.qpicamera2)
+        self.qpicamera2.done_signal.connect(self.capture_done)
 
-    def start_preview(self):
-        self.preview_stream = PreviewStream(self.camera)
-        self.preview_stream.start()
-        self.capture_preview()
+        self.btnCapture = QPushButton("Capture Image")
+        self.btnCapture.setFont(QFont("Helvetica", 20, QFont.Bold))
+        self.btnCapture.clicked.connect(self.on_Capture_Clicked)
+        
+        self.btnRecord = QPushButton("Record Video")
+        self.btnRecord.setFont(QFont("Helvetica", 20, QFont.Bold))
+        self.btnRecord.clicked.connect(self.on_Record_Clicked)
+        
+        self.btnStopRecord = QPushButton("Stop Recording")
+        self.btnStopRecord.setFont(QFont("Helvetica", 20, QFont.Bold))
+        self.btnStopRecord.clicked.connect(self.on_Stop_Record_Clicked)
+        self.btnStopRecord.setEnabled(False)
+        
+        self.tabCapture.layout.addWidget(self.btnCapture)
+        self.tabCapture.layout.addWidget(self.btnRecord)
+        self.tabCapture.layout.addWidget(self.btnStopRecord)
+        #self.tabCapture.layout.addStretch()
+        
+        self.tabCapture.setLayout(self.tabCapture.layout)
+        
+        #=== Tab Info ===
+        self.tabInfo.layout = QVBoxLayout()
+        
+        infoGridLayout = QGridLayout()
+        
+        rowSpan = 1
+        columnSpan0 = 1
+        columnSpan1 = 5
+        infoGridLayout.addWidget(QLabel('Python', self), 0, 0, rowSpan, columnSpan0)
+        infoGridLayout.addWidget(QLabel(platform.python_version(), self), 0, 1, rowSpan, columnSpan1)
+        
+        infoGridLayout.addWidget(QLabel(picamera2_name, self), 1, 0, rowSpan, columnSpan0)
+        infoGridLayout.addWidget(QLabel(version(picamera2_name), self), 1, 1, rowSpan, columnSpan1)
+        
+        infoGridLayout.addWidget(QLabel(' ', self), 2, 0, rowSpan, columnSpan0)        
+        infoGridLayout.addWidget(QLabel('Camera Module:', self), 3, 0, rowSpan, columnSpan0)
+        
+        cam_properties = picam2.camera_properties
+        cam_Model = cam_properties['Model']
+        infoGridLayout.addWidget(QLabel('Model', self), 4, 0, rowSpan, columnSpan0)
+        infoGridLayout.addWidget(QLabel(cam_Model, self), 4, 1, rowSpan, columnSpan1)
+        cam_PixelArraySize = str(cam_properties['PixelArraySize'][0]) + " x " + str(cam_properties['PixelArraySize'][1])
+        infoGridLayout.addWidget(QLabel('PixelArraySize', self), 5, 0, rowSpan, columnSpan0)
+        infoGridLayout.addWidget(QLabel(cam_PixelArraySize, self), 5, 1, rowSpan, columnSpan1)
+        
+        infoGridLayout.addWidget(QLabel(' ', self), 6, 0, rowSpan, columnSpan0)
+        infoGridLayout.addWidget(QLabel('Machine:', self), 7, 0, rowSpan, columnSpan0)
+        infoGridLayout.addWidget(QLabel('Board', self), 8, 0, rowSpan, columnSpan0)
+        board_def = "/proc/device-tree/model"
+        board_info = self.read_f("/proc/device-tree/model") +"\n(" + board_def +")"
+        infoGridLayout.addWidget(QLabel(board_info, self), 8, 1, rowSpan, columnSpan0)
+        
+        infoGridLayout.addWidget(QLabel('OS', self), 9, 0, rowSpan, columnSpan0)
+        os_info = self.read_pretty_name() + "\n" + os.uname()[3]
+        infoGridLayout.addWidget(QLabel(os_info, self), 9, 1, rowSpan, columnSpan1)
+        
+        self.tabInfo.layout.addLayout(infoGridLayout)
+        self.tabInfo.layout.addStretch()
+        
+        self.tabInfo.setLayout(self.tabInfo.layout)
+        
+        #==================================
+        # Add tabs to widget
+        self.layout.addWidget(self.tabs)
+        self.setLayout(self.layout)
+        
+        picam2.start()
 
-    def capture_preview(self):
-        # Capture a preview frame using picamera2
-        with self.camera.capture_continuous(self.preview_stream.formats, burst=True) as capture_request:
-            for frame in capture_request:
-                frame.wait_done()
-                # Convert frame data to QPixmap
-                pixmap = QPixmap.fromImage(frame.image)
-                self.preview_label.setPixmap(pixmap)
-                self.preview_label.show()
-                break
-
-    def capture_image(self):
-        # Use picamera2 for image capture
-        with self.camera.capture_single(JPEGStream(self.camera), mainloop=False) as capture_request:
-            capture_request.wait_done()
-            image_data = capture_request.rents[0].data
-            with open(os.path.expanduser('~/Pictures/captured_image.jpg'), 'wb') as f:
-                f.write(image_data)
-        print("Image captured and saved in Pictures directory as captured_image.jpg")
-
-    def start_video_recording(self):
-        # Use picamera2 for video recording (example using h264)
-        self.video_stream = self.camera.create_video_stream(encoding="h264")
-        self.video_stream.start_recording(os.path.expanduser('~/Videos/captured_video.h264'))
-        self.start_video_button.setEnabled(False)
-        self.stop_video_button.setEnabled(True)
-        self.is_recording = True
-
-    def stop_video_recording(self):
-        self.video_stream.stop_recording()
-        self.start_video_button.setEnabled(True)
-        self.stop_video_button.setEnabled(False)
-        self.is_recording = False
-        print("Video recording stopped")
-
-def main():
+if __name__ == '__main__':
     app = QApplication(sys.argv)
-    window = CameraApp()
-    window.show()
+    ex = App()
     sys.exit(app.exec_())
-
-if __name__ == "__main__":
-    main()
