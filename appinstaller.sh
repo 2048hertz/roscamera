@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Path to the Python script
-PYTHON_SCRIPT="/usr/bin/RobertOS-assets/roscamera-main/camera.py"
+BASH_SCRIPT="/usr/bin/RobertOS-assets/roscamera-main/camera.sh"
 
 # Name of the desktop file
 DESKTOP_FILE="/usr/share/applications/Robert_Camera_App.desktop"
@@ -12,7 +12,7 @@ cat <<EOF > "$DESKTOP_FILE"
 Version=1.0
 Type=Application
 Terminal=false
-Exec=python3 "$PYTHON_SCRIPT"
+Exec=bash "/usr/bin/RobertOS-assets/roscamera-main/camera.sh"
 Name=Camera
 Comment=Camera application for the Robert computer
 Icon=/usr/bin/RobertOS-assets/roscamera.png
