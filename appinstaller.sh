@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Path to the Python script
-PYTHON_SCRIPT="/path/to/your/python/script.py"
+PYTHON_SCRIPT="/usr/bin/RobertOS-assets/roscamera-main/camera.py"
 
 # Name of the desktop file
 DESKTOP_FILE="/usr/share/applications/Robert_Camera_App.desktop"
