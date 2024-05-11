@@ -8,7 +8,7 @@ import os
 class CameraApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Raspberry Pi Camera App")
+        self.setWindowTitle("RobertOS Camera App")
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
