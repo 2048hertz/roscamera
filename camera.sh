@@ -3,7 +3,7 @@
 # Function to capture a picture
 function take_picture() {
   local filename=$(date +"%Y-%m-%d_%H-%M-%S.jpg")
-  raspistill -o "$HOME/Pictures/$filename" -t 5000  # Adjust -t for capture time in milliseconds
+  rpicam-still -o "$HOME/Pictures/$filename" -t 5000  # Adjust -t for capture time in milliseconds
   zenity --info --text "Picture captured: $filename"
 }
 
@@ -12,7 +12,7 @@ function start_recording() {
   local filename=$(date +"%Y-%m-%d_%H-%M-%S.h264")
   zenity --info --text "Recording started. Press any key to stop." &
   RECORD_PID=$!  # Store background process ID (Zenity)
-  raspivid -o "/tmp/$filename"  # Record to temporary file 
+  rpicam-vid -o "/tmp/$filename"  # Record to temporary file 
 
   # Wait for user to press any key (Zenity exits)
   wait $RECORD_PID
