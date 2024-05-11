@@ -15,7 +15,7 @@ Terminal=false
 Exec=python3 "$PYTHON_SCRIPT"
 Name=Camera
 Comment=Camera application for the Robert computer
-Icon=/path/to/your/icon/icon.png
+Icon=/usr/bin/RobertOS-assets/roscamera.png
 Categories=Utility;
 EOF
 
