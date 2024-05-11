@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QPus
 from PyQt5.QtGui import QPixmap
 from picamera import PiCamera
 from time import sleep
+import os
 
 class CameraApp(QMainWindow):
     def __init__(self):
@@ -44,17 +45,17 @@ class CameraApp(QMainWindow):
         self.capture_preview()
 
     def capture_preview(self):
-        self.camera.capture('preview.jpg')
-        pixmap = QPixmap('preview.jpg')
+        self.camera.capture(os.path.expanduser('~/Pictures/preview.jpg'))
+        pixmap = QPixmap(os.path.expanduser('~/Pictures/preview.jpg'))
         self.preview_label.setPixmap(pixmap)
         self.preview_label.show()
 
     def capture_image(self):
-        self.camera.capture('captured_image.jpg')
-        print("Image captured and saved as captured_image.jpg")
+        self.camera.capture(os.path.expanduser('~/Pictures/captured_image.jpg'))
+        print("Image captured and saved in Pictures directory as captured_image.jpg")
 
     def start_video_recording(self):
-        self.camera.start_recording('captured_video.h264')
+        self.camera.start_recording(os.path.expanduser('~/Videos/captured_video.h264'))
         self.start_video_button.setEnabled(False)
         self.stop_video_button.setEnabled(True)
         self.is_recording = True
